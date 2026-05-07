@@ -10,7 +10,7 @@ from flask import Blueprint, Response
 explainer_bp = Blueprint("explainer", __name__)
 
 AGENT_INSTRUCTIONS = """\
-# Microsoft Bot Framework Twin — microsoft-bot-framework.twins.la
+# Microsoft Bot Framework Twin — bf.twins.la
 
 A high-fidelity digital twin of two halves of the Microsoft Bot Framework
 that work independently:
@@ -128,7 +128,7 @@ EXPLAINER_HTML = """\
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>microsoft-bot-framework.twins.la &mdash; Microsoft Bot Framework Twin</title>
+    <title>bf.twins.la &mdash; Microsoft Bot Framework Twin</title>
     <link rel="icon" type="image/png" href="https://twins.la/twins.png">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400&display=swap');
@@ -149,7 +149,7 @@ EXPLAINER_HTML = """\
             color: #1a2e4a;
             margin-bottom: 0.5rem;
         }
-        h1 .microsoft-bot-framework { color: #4b53bc; }
+        h1 .bf { color: #4b53bc; }
         .tagline { font-size: 1.1rem; color: #6b7280; margin-bottom: 2.5rem; font-weight: 300; }
         h2 {
             font-size: 1.25rem;
@@ -228,7 +228,7 @@ EXPLAINER_HTML = """\
 <body>
     <main>
         <p class="breadcrumb"><a href="https://twins.la">twins.la</a></p>
-        <h1><span class="microsoft-bot-framework">microsoft-bot-framework</span>.twins.la</h1>
+        <h1><span class="bf">bf</span>.twins.la</h1>
         <p class="tagline">A digital twin of the Microsoft Bot Framework.</p>
 
         <h2>What is this?</h2>
@@ -263,7 +263,7 @@ EXPLAINER_HTML = """\
         <p>
             <strong>Cloud:</strong> Point your Bot Framework SDK's
             <code>ToBotFromChannelOpenIdMetadataUrl</code> at
-            <code>https://microsoft-bot-framework.twins.la/v1/.well-known/openidconfiguration</code>,
+            <code>https://bf.twins.la/v1/.well-known/openidconfiguration</code>,
             and use the <code>app_id</code>/<code>app_password</code>
             returned by <code>POST /_twin/accounts</code>.
         </p>

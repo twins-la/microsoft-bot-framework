@@ -23,7 +23,7 @@ See [`SCENARIOS.md`](SCENARIOS.md) for the full scope and authoritative referenc
 This package is not run directly. It is loaded by a host:
 
 - **Local**: `twins-microsoft-bot-framework-local` (sibling package under `twins_microsoft_bot_framework_local/`) — run via gunicorn or `python -m twins_microsoft_bot_framework_local`.
-- **Cloud**: available at [microsoft-bot-framework.twins.la](https://microsoft-bot-framework.twins.la).
+- **Cloud**: available at [bf.twins.la](https://bf.twins.la).
 
 ## Quick Start (local)
 
