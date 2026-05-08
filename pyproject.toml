@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "twins-microsoft-bot-framework"
-version = "0.1.0"
+version = "0.2.0"
 description = "Microsoft Bot Framework digital twin for twins.la (channel + bot halves)"
 requires-python = ">=3.11"
 dependencies = [

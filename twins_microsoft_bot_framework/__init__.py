@@ -18,4 +18,4 @@ issuer; pointing a real bot at the twin requires the SDK's
 OpenID metadata URL — see ``SCENARIOS.md``.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
