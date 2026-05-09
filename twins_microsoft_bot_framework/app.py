@@ -15,6 +15,7 @@ from twins_local.logs import install_correlation_id
 
 from .crypto import ensure_keypair
 from .explainer import explainer_bp
+from .routes.api_data import api_data_bp
 from .routes.bot import bot_bp
 from .routes.channel import channel_bp
 from .routes.oauth_token import oauth_token_bp
@@ -77,6 +78,10 @@ def create_app(
     app.register_blueprint(bot_bp)
     app.register_blueprint(twin_plane_bp)
     app.register_blueprint(explainer_bp)
+    # Catch-all for unimplemented /api/<rest> and /v3/<rest> paths —
+    # registered LAST so specific routes take precedence. Closes
+    # twins-la/twins-la#2.
+    app.register_blueprint(api_data_bp)
 
     logger.info(
         "Microsoft Bot Framework twin created — base_url=%s cloud=%s",
