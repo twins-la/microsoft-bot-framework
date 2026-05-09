@@ -408,6 +408,32 @@ class SQLiteStorage(TwinStorage):
                 conn.close()
         return {"kid": kid, "private_pem": private_pem, "public_pem": public_pem}
 
+    def get_or_create_signing_key(self, generator) -> dict:
+        # `self._lock` is held across the entire SELECT-then-INSERT, so two
+        # concurrent threads (or gunicorn workers via the connection-level lock)
+        # cannot both observe "no key" and both generate. Postgres serialization
+        # for the cloud path uses pg_advisory_xact_lock — see twins-la/cloud
+        # twins_cloud/storage_postgres_microsoft_bot_framework.py.
+        # See twins-la/microsoft-bot-framework#2 for the race that motivated this.
+        with self._lock:
+            conn = self._get_conn()
+            try:
+                row = conn.execute(
+                    "SELECT kid, private_pem, public_pem FROM signing_keys "
+                    "ORDER BY date_created LIMIT 1"
+                ).fetchone()
+                if row:
+                    return dict(row)
+                kid, private_pem, public_pem = generator()
+                conn.execute(
+                    "INSERT INTO signing_keys (kid, private_pem, public_pem) VALUES (?, ?, ?)",
+                    (kid, private_pem, public_pem),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+        return {"kid": kid, "private_pem": private_pem, "public_pem": public_pem}
+
     # -- feedback --
 
     def create_feedback(self, data: dict) -> dict:

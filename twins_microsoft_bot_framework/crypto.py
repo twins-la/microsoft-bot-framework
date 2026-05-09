@@ -95,10 +95,8 @@ def ensure_keypair(storage) -> dict:
     """Load the channel's signing key from ``storage``, generating one if
     none exists. Returns ``{kid, private_pem, public_pem}``.
 
-    Idempotent — safe to call from every ``create_app``.
+    Idempotent — safe to call from every ``create_app`` and race-free under
+    concurrent first-boot traffic: the storage layer serializes
+    check-and-create via ``get_or_create_signing_key``.
     """
-    existing = storage.get_signing_key()
-    if existing:
-        return existing
-    kid, private_pem, public_pem = generate_keypair_pem()
-    return storage.put_signing_key(kid=kid, private_pem=private_pem, public_pem=public_pem)
+    return storage.get_or_create_signing_key(generate_keypair_pem)

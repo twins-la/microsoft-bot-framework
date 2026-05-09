@@ -114,6 +114,19 @@ class TwinStorage(ABC):
     def put_signing_key(self, *, kid: str, private_pem: str, public_pem: str) -> dict:
         """Persist the channel's signing keypair."""
 
+    @abstractmethod
+    def get_or_create_signing_key(self, generator) -> dict:
+        """Atomically load the singleton signing keypair, generating one if none
+        exists. The check-and-create MUST be serialized so concurrent first-time
+        callers (e.g., gunicorn pre-fork workers booting simultaneously) produce
+        exactly one keypair.
+
+        ``generator`` is called only when no key is present and must return a
+        ``(kid, private_pem, public_pem)`` tuple. Returns the dict shape of
+        ``get_signing_key``.
+
+        Closes twins-la/microsoft-bot-framework#2 (cold-start keypair race)."""
+
     # -- Feedback --
 
     @abstractmethod
