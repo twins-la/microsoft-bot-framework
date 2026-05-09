@@ -13,7 +13,7 @@ import sqlite3
 import threading
 from typing import Optional
 
-from twins_microsoft_bot_framework.storage import TwinStorage
+from twins_microsoft_bot_framework.storage import StorageConflictError, TwinStorage
 
 
 _VALID_FEEDBACK_COLUMNS = frozenset({"status", "date_updated"})
@@ -60,6 +60,15 @@ class SQLiteStorage(TwinStorage):
                     );
                     CREATE INDEX IF NOT EXISTS idx_instances_tenant ON bot_instances(tenant_id);
                     CREATE INDEX IF NOT EXISTS idx_instances_app_id ON bot_instances(app_id);
+                    -- Closes twins-la/microsoft-bot-framework#1: prevent two
+                    -- bot_instances rows sharing (tenant_id, app_id), which
+                    -- would silently shadow each other in /api/messages
+                    -- routing. CREATE UNIQUE INDEX IF NOT EXISTS is idempotent
+                    -- on fresh and migrated DBs. If existing duplicates block
+                    -- creation on an upgrade, the index creation raises and
+                    -- the operator must dedupe before the next startup.
+                    CREATE UNIQUE INDEX IF NOT EXISTS idx_instances_tenant_app
+                        ON bot_instances(tenant_id, app_id);
 
                     CREATE TABLE IF NOT EXISTS conversations (
                         id TEXT PRIMARY KEY,
@@ -190,14 +199,23 @@ class SQLiteStorage(TwinStorage):
         trusted_openid_url: str,
         friendly_name: str,
     ) -> dict:
+        # On (tenant_id, app_id) collision, raise StorageConflictError
+        # (translated from sqlite3.IntegrityError on the unique index
+        # added in `_init_db`). The route layer catches this and returns
+        # 409. Closes twins-la/microsoft-bot-framework#1.
         with self._lock:
             conn = self._get_conn()
             try:
-                conn.execute(
-                    "INSERT INTO bot_instances (bot_id, tenant_id, app_id, trusted_openid_url, friendly_name) VALUES (?, ?, ?, ?, ?)",
-                    (bot_id, tenant_id, app_id, trusted_openid_url, friendly_name),
-                )
-                conn.commit()
+                try:
+                    conn.execute(
+                        "INSERT INTO bot_instances (bot_id, tenant_id, app_id, trusted_openid_url, friendly_name) VALUES (?, ?, ?, ?, ?)",
+                        (bot_id, tenant_id, app_id, trusted_openid_url, friendly_name),
+                    )
+                    conn.commit()
+                except sqlite3.IntegrityError as exc:
+                    raise StorageConflictError(
+                        f"bot_instance with app_id {app_id!r} already exists in tenant"
+                    ) from exc
             finally:
                 conn.close()
         return {

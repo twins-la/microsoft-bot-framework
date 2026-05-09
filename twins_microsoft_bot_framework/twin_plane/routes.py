@@ -31,6 +31,7 @@ from .. import __version__
 from ..crypto import ensure_keypair
 from ..errors import plane_error
 from ..logs import emit
+from ..storage import StorageConflictError
 from ..models import (
     build_activity,
     channel_account,
@@ -309,13 +310,23 @@ def create_account():
             )
         app_id = payload.get("app_id") or generate_app_id()
         bot_id = generate_bot_instance_id()
-        instance = g.storage.create_bot_instance(
-            tenant_id=g.tenant_id,
-            bot_id=bot_id,
-            app_id=app_id,
-            trusted_openid_url=trusted_openid_url,
-            friendly_name=payload.get("friendly_name", ""),
-        )
+        try:
+            instance = g.storage.create_bot_instance(
+                tenant_id=g.tenant_id,
+                bot_id=bot_id,
+                app_id=app_id,
+                trusted_openid_url=trusted_openid_url,
+                friendly_name=payload.get("friendly_name", ""),
+            )
+        except StorageConflictError:
+            # Two bot_instances cannot share (tenant_id, app_id) — the
+            # storage layer enforces this via a UNIQUE index. Closes
+            # twins-la/microsoft-bot-framework#1.
+            return plane_error(
+                f"A bot_instance with app_id {app_id!r} already exists "
+                "in this tenant",
+                409,
+            )
         emit(
             g.storage,
             tenant_id=g.tenant_id,

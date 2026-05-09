@@ -45,8 +45,16 @@ def tenant_store(tmp_path):
 
 
 @pytest.fixture
-def twin_app(tmp_path, tenant_store):
-    storage = SQLiteStorage(db_path=str(tmp_path / "test_twin.db"))
+def storage(tmp_path):
+    """Twin's SQLiteStorage backing the in-process app. Exposed as a
+    fixture so tests can read or pre-populate storage state directly
+    (e.g., the channel's signing key for validation-failure tests).
+    """
+    return SQLiteStorage(db_path=str(tmp_path / "test_twin.db"))
+
+
+@pytest.fixture
+def twin_app(storage, tenant_store):
     app = create_app(
         storage=storage,
         tenants=tenant_store,

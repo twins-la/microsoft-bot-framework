@@ -20,6 +20,16 @@ from abc import ABC, abstractmethod
 from typing import Optional
 
 
+class StorageConflictError(Exception):
+    """Raised by storage methods when a UNIQUE constraint violation occurs.
+
+    Concrete impls (SQLite, Postgres) translate native driver exceptions
+    (sqlite3.IntegrityError, psycopg2.IntegrityError) into this exception
+    so the twin-package code can catch it without importing driver libs.
+    Closes twins-la/microsoft-bot-framework#1.
+    """
+
+
 class TwinStorage(ABC):
     """Storage backend contract that hosts must implement."""
 

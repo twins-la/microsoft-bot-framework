@@ -145,3 +145,96 @@ def test_unknown_kid_returns_unknown_kid(client, tenant_headers, monkeypatch):
     )
     assert resp.status_code == 403
     assert resp.get_json()["error"]["message"] == "unknown-kid"
+
+
+def _channel_signing_key(client, storage):
+    """Force the channel half to publish its JWKS (which calls
+    `ensure_keypair`) and read the resulting key out of storage so the
+    test can sign tokens with the channel's actual private key.
+    """
+    jwks_resp = client.get("/v1/.well-known/keys")
+    assert jwks_resp.status_code == 200, jwks_resp.get_data(as_text=True)
+    key = storage.get_signing_key()
+    assert key is not None, "channel did not publish a signing key"
+    return key["kid"], key["private_pem"]
+
+
+def test_expired_token_returns_expired(
+    client, storage, tenant_headers, monkeypatch
+):
+    """Closes twins-la/microsoft-bot-framework#3 (expired-JWT half).
+
+    A token signed by the channel's actual key but with `exp` in the
+    past must be rejected with reason ``expired``.
+    """
+    _patch_requests(monkeypatch, client)
+    inst = _register_instance(
+        client,
+        tenant_headers,
+        app_id="00000000-0000-0000-0000-000000000003",
+        trusted_url="http://localhost:8080/v1/.well-known/openidconfiguration",
+    )
+    kid, private_pem = _channel_signing_key(client, storage)
+    now = int(time.time())
+    # Expire well past the 5-minute CLOCK_SKEW_SECONDS leeway — 1 hour ago.
+    token = _jwt.encode(
+        {
+            "iss": ISSUER,
+            "aud": inst["app_id"],
+            "serviceUrl": "http://localhost:8080",
+            "nbf": now - 7200,
+            "exp": now - 3600,
+        },
+        private_pem,
+        algorithm="RS256",
+        headers={"kid": kid},
+    )
+    resp = client.post(
+        "/api/messages",
+        json=_activity(app_id=inst["app_id"], service_url="http://localhost:8080"),
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 403
+    assert resp.get_json()["error"]["message"] == "expired"
+
+
+def test_service_url_mismatch_returns_specific_reason(
+    client, storage, tenant_headers, monkeypatch
+):
+    """Closes twins-la/microsoft-bot-framework#3 (serviceUrl-mismatch half).
+
+    A token whose ``serviceUrl`` claim does not match the activity's
+    ``serviceUrl`` must be rejected with reason ``service-url-mismatch``.
+    """
+    _patch_requests(monkeypatch, client)
+    inst = _register_instance(
+        client,
+        tenant_headers,
+        app_id="00000000-0000-0000-0000-000000000004",
+        trusted_url="http://localhost:8080/v1/.well-known/openidconfiguration",
+    )
+    kid, private_pem = _channel_signing_key(client, storage)
+    now = int(time.time())
+    token = _jwt.encode(
+        {
+            "iss": ISSUER,
+            "aud": inst["app_id"],
+            "serviceUrl": "http://claimed-service.example",
+            "nbf": now - 5,
+            "exp": now + 600,
+        },
+        private_pem,
+        algorithm="RS256",
+        headers={"kid": kid},
+    )
+    # Activity carries a different serviceUrl than the token claim.
+    resp = client.post(
+        "/api/messages",
+        json=_activity(
+            app_id=inst["app_id"],
+            service_url="http://different-service.example",
+        ),
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 403
+    assert resp.get_json()["error"]["message"] == "service-url-mismatch"
