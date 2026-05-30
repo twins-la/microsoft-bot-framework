@@ -219,3 +219,6 @@ __marimo__/
 
 # twin runtime
 data/
+# Local agent/tooling state — never commit
+.devbox/
+.claude/
