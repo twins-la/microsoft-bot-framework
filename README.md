@@ -32,6 +32,12 @@ pip install -e . ./twins_microsoft_bot_framework_local/
 python -m twins_microsoft_bot_framework_local
 ```
 
+The third-party dependency set is pinned in `requirements.lock` (generated
+from `requirements.in` via `uv pip compile`). For a verified, reproducible
+environment install those pins first: `pip install -r requirements.lock`.
+The `audit` GitHub Actions workflow runs `pip-audit` against the lock on
+every push.
+
 Then drive a synthetic round-trip:
 
 ```bash
