@@ -99,6 +99,7 @@ def messages():
             audience=instance["app_id"],
             expected_service_url=activity_service_url,
             trusted_openid_url=instance["trusted_openid_url"],
+            restrict_outbound=bool(g.get("is_cloud", False)),
         )
     except ValidationFailure as exc:
         emit(

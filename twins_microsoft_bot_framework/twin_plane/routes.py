@@ -538,6 +538,7 @@ def post_reply(bot_id: str):
             trusted_openid_url=instance["trusted_openid_url"],
             app_id=instance["app_id"],
             app_password=app_password,
+            restrict_outbound=bool(g.get("is_cloud", False)),
         )
     except ValidationFailure as exc:
         emit(

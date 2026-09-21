@@ -26,6 +26,7 @@ import jwt
 import requests
 
 from .crypto import jwk_for_public_key, load_private_key, load_public_key
+from .outbound import OutboundURLRejected, check_outbound_url
 
 ISSUER = "https://api.botframework.com"
 """Constant ``iss`` for both directions, matching real Bot Framework."""
@@ -39,6 +40,9 @@ CLOCK_SKEW_SECONDS = 5 * 60
 JWKS_CACHE_SECONDS = 5 * 60
 """Cache JWKS responses for 5 minutes; lower than the BF-recommended 24 h
 because tests rotate keys frequently."""
+
+JWKS_CACHE_MAX_ENTRIES = 256
+"""Upper bound on distinct cached JWKS URLs; the cache is cleared when full."""
 
 
 # ---- channel-side issuance ----
@@ -109,7 +113,7 @@ class ValidationFailure(Exception):
     """Specific machine-readable rejection reason. Intentionally enumerated:
     ``bad-iss`` / ``bad-aud`` / ``expired`` / ``unknown-kid`` / ``sig-invalid``
     / ``service-url-mismatch`` / ``missing-bearer`` / ``missing-claim`` /
-    ``unsupported-alg``. Tests assert on these literals."""
+    ``unsupported-alg`` / ``untrusted-url``. Tests assert on these literals."""
 
 
 def validate_channel_self_issued_token(
@@ -153,20 +157,43 @@ def validate_channel_self_issued_token(
 _jwks_cache: dict[str, tuple[float, dict]] = {}
 
 
-def _fetch_openid_config(openid_url: str) -> dict:
-    resp = requests.get(openid_url, timeout=10)
+def _checked(url, restrict_outbound: bool) -> str:
+    """Apply the outbound URL policy when restricted; return the URL."""
+    if not restrict_outbound:
+        return url
+    if not isinstance(url, str):
+        raise ValidationFailure("untrusted-url")
+    try:
+        check_outbound_url(url)
+    except OutboundURLRejected as exc:
+        raise ValidationFailure("untrusted-url") from exc
+    return url
+
+
+def _fetch_openid_config(openid_url: str, *, restrict_outbound: bool = False) -> dict:
+    resp = requests.get(
+        _checked(openid_url, restrict_outbound),
+        timeout=10,
+        allow_redirects=not restrict_outbound,
+    )
     resp.raise_for_status()
     return resp.json()
 
 
-def _fetch_jwks(jwks_uri: str) -> dict:
+def _fetch_jwks(jwks_uri: str, *, restrict_outbound: bool = False) -> dict:
     cached = _jwks_cache.get(jwks_uri)
     now = time.time()
     if cached and (now - cached[0]) < JWKS_CACHE_SECONDS:
         return cached[1]
-    resp = requests.get(jwks_uri, timeout=10)
+    resp = requests.get(
+        _checked(jwks_uri, restrict_outbound),
+        timeout=10,
+        allow_redirects=not restrict_outbound,
+    )
     resp.raise_for_status()
     body = resp.json()
+    if len(_jwks_cache) >= JWKS_CACHE_MAX_ENTRIES:
+        _jwks_cache.clear()
     _jwks_cache[jwks_uri] = (now, body)
     return body
 
@@ -182,6 +209,7 @@ def validate_channel_to_bot_jwt(
     audience: str,
     expected_service_url: str,
     trusted_openid_url: str,
+    restrict_outbound: bool = False,
 ) -> dict:
     """Validate a channel→bot JWT against the channel's published metadata.
 
@@ -200,8 +228,10 @@ def validate_channel_to_bot_jwt(
     if not kid:
         raise ValidationFailure("missing-claim")
 
-    config = _fetch_openid_config(trusted_openid_url)
-    jwks = _fetch_jwks(config["jwks_uri"])
+    config = _fetch_openid_config(
+        trusted_openid_url, restrict_outbound=restrict_outbound
+    )
+    jwks = _fetch_jwks(config["jwks_uri"], restrict_outbound=restrict_outbound)
     matching = next((k for k in jwks.get("keys", []) if k.get("kid") == kid), None)
     if not matching:
         raise ValidationFailure("unknown-kid")
@@ -235,6 +265,7 @@ def acquire_bot_to_channel_token(
     trusted_openid_url: str,
     app_id: str,
     app_password: str,
+    restrict_outbound: bool = False,
 ) -> Optional[str]:
     """Bot-side helper: discover the channel's token endpoint via the
     OpenID metadata, then exchange ``app_id``/``app_password`` for a
@@ -243,12 +274,15 @@ def acquire_bot_to_channel_token(
     Returns the access_token on success; raises ``requests.HTTPError`` or
     a :class:`ValidationFailure` with a specific reason on failure.
     """
-    config = _fetch_openid_config(trusted_openid_url)
+    config = _fetch_openid_config(
+        trusted_openid_url, restrict_outbound=restrict_outbound
+    )
     token_endpoint = config.get("token_endpoint")
     if not token_endpoint:
         raise ValidationFailure("missing-token-endpoint")
     resp = requests.post(
-        token_endpoint,
+        _checked(token_endpoint, restrict_outbound),
+        allow_redirects=not restrict_outbound,
         data={
             "grant_type": "client_credentials",
             "client_id": app_id,
